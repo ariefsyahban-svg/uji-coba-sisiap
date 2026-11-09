@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  app:
+    image: sisiap-pbj:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sisiap-app
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - APP_NAME="SI-SIAP PBJ"
+      - APP_ENV=production
+      - APP_KEY=${APP_KEY}
+      - APP_DEBUG=false
+      - APP_URL=https://sisiap.sultengprov.go.id
+      - LOG_CHANNEL=daily
+      
+      # Database Configuration
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      
+      # WhatsApp API (Fonnte/Qiscus dll)
+      - WA_API_URL=${WA_API_URL}
+      - WA_API_TOKEN=${WA_API_TOKEN}
+      
+      # SIRUP API
+      - SIRUP_API_BASE_URL=${SIRUP_API_BASE_URL}
+      - SIRUP_API_KEY=${SIRUP_API_KEY}
+      
+      # Redis untuk Cache dan Queue
+      - CACHE_DRIVER=redis
+      - QUEUE_CONNECTION=redis
+      - SESSION_DRIVER=redis
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+
+    volumes:
+      - ./storage/app/private:/var/www/html/storage/app/private
+      - ./storage/logs:/var/www/html/storage/logs
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:15-alpine
+    container_name: sisiap-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_DATABASE}
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - sisiap-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: sisiap-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  worker:
+    image: sisiap-pbj:latest
+    container_name: sisiap-worker
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=3 --tries=3
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - QUEUE_CONNECTION=redis
+      - REDIS_HOST=redis
+      - WA_API_URL=${WA_API_URL}
+      - WA_API_TOKEN=${WA_API_TOKEN}
+    depends_on:
+      - redis
+      - db
+
+volumes:
+  sisiap-pgdata:
+    driver: local
